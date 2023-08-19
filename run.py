@@ -5,7 +5,10 @@ from pathlib import Path
 from typing import List
 
 from sc2 import maps
+from sc2.bot_ai import BotAI
 from sc2.data import AIBuild, Difficulty, Race
+from sc2.ids.ability_id import AbilityId
+from sc2.ids.unit_typeid import UnitTypeId
 from sc2.main import run_game
 from sc2.player import Bot, Computer
 
@@ -27,6 +30,35 @@ MY_BOT_NAME: str = "MyBotName"
 MY_BOT_RACE: str = "MyBotRace"
 
 
+class DoNothingBot(BotAI):
+    def __init__(self):
+        super().__init__()
+
+    async def on_step(self, iteration):
+        target = self.game_info.map_center
+        if self.enemy_start_locations:
+            target = self.enemy_start_locations[0]
+        elif self.enemy_structures:
+            target = self.enemy_structures.first.position
+        # if self.race == Race.Terran and self.units:
+        #     for unit in self.units:
+        #         if unit.type_id == UnitTypeId.SIEGETANK:
+        #             pos = self.structures.first.position.towards(
+        #                 self.enemy_structures[0].position, 3.0)
+        #             if unit.distance_to(pos) > 1.0:
+        #                 unit.move(pos)
+        #             else:
+        #                 unit(AbilityId.SIEGEMODE_SIEGEMODE)
+        #         elif not unit.is_attacking:
+        #             pos = self.structures.first.position
+        #             if unit.distance_to(pos) > 2.0:
+        #                 unit.move(pos)
+        #
+        # else:
+        for unit in self.units.idle:
+            unit.attack(target)
+
+
 def main():
     bot_name: str = "MyBot"
     race: Race = Race.Random
@@ -43,6 +75,7 @@ def main():
                 race = Race[config[MY_BOT_RACE].title()]
 
     bot1 = Bot(race, MyBot(), bot_name)
+    bot2 = Bot(Race.Random, DoNothingBot())
 
     if "--LadderServer" in sys.argv:
         # Ladder game started by LadderManager
@@ -51,20 +84,11 @@ def main():
         print(result, " against opponent ", opponentid)
     else:
         # Local game
-        map_list: List[str] = [
-            p.name.replace(f".{MAP_FILE_EXT}", "")
-            for p in Path(MAPS_PATH).glob(f"*.{MAP_FILE_EXT}")
-            if p.is_file()
-        ]
         # alternative example code if finding the map path is problematic
-        # map_list: List[str] = [
-        #     "BerlingradAIE",
-        #     "InsideAndOutAIE",
-        #     "MoondanceAIE",
-        #     "StargazersAIE",
-        #     "WaterfallAIE",
-        #     "HardwireAIE",
-        # ]
+        map_list: List[str] = [
+            "BotMicroArena_4",
+            # "BerlingradAIE"
+        ]
 
         random_race = random.choice([Race.Zerg, Race.Terran, Race.Protoss])
         print("Starting local game...")
@@ -72,7 +96,7 @@ def main():
             maps.get(random.choice(map_list)),
             [
                 bot1,
-                Computer(random_race, Difficulty.CheatVision, ai_build=AIBuild.Macro),
+                bot2,
             ],
             realtime=False,
         )

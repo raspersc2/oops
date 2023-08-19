@@ -3,14 +3,14 @@
 # Can add own unique config options here if desired
 
 # Custom values not used by ares
-MyBotName: MyBotName
+MyBotName: oops
 MyBotRace: Random
 ########################
 
 UseData: False
 Debug: False
-GameStep: 2
-DebugGameStep: 2
+GameStep: 1
+DebugGameStep: 1
 
 DebugOptions:
     # one of: Air, AirVsGround, Ground, GroundAvoidance, AirAvoidance
