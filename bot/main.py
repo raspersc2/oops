@@ -4,8 +4,10 @@ from typing import Optional
 import numpy as np
 from ares import AresBot
 from ares.consts import ALL_STRUCTURES
+from ares.cython_extensions.units_utils import cy_closest_to
 from ares.dicts.unit_data import UNIT_DATA
 from sc2.data import Race
+from sc2.position import Point2
 from sc2.units import Units
 
 from bot.combat.base_combat import BaseCombat
@@ -29,7 +31,17 @@ class MyBot(AresBot):
         self._detected_race: bool = False
         self._detected_enemy_race: Race = Race.Random
         self._sent_oops_chat: bool = False
+        self._sent_race_tag: bool = False
         self._unreachable_cells = None
+
+    @property
+    def attack_target(self) -> Point2:
+        attack_target: Point2 = self.game_info.map_center
+        if self.enemy_structures:
+            attack_target: Point2 = cy_closest_to(
+                self.game_info.map_center, self.enemy_structures
+            ).position
+        return attack_target
 
     @property
     def corrected_enemy_race(self) -> Race:
@@ -53,14 +65,17 @@ class MyBot(AresBot):
         # temporary fix to pathing grid so we don't try to reach unpathable areas
         grid = self._fix_grid(self.mediator.get_ground_grid.copy())
 
-        self.combat_controller.execute(self.units, grid)
+        self.combat_controller.execute(
+            self.units, grid, attack_target=self.attack_target
+        )
 
         if not self._sent_oops_chat and not self.units and self.time > 10.0:
             await self.chat_send("oops")
             self._sent_oops_chat = True
 
-        for unit in self.units:
-            self.draw_text_on_world(unit.position, f"{unit.tag}")
+        if not self._sent_race_tag and self.time > 5.0:
+            await self.chat_send(f"Tag: {self.race}", True)
+            self._sent_race_tag = True
 
     def _fix_grid(self, grid: np.ndarray) -> np.ndarray:
         """

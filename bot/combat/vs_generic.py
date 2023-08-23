@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 from ares import ManagerMediator
@@ -22,6 +22,7 @@ from sc2.ids.unit_typeid import UnitTypeId
 from sc2.position import Point2
 from sc2.unit import Unit
 from sc2.units import Units
+from scipy.interpolate import interp1d
 
 from bot.combat.base_combat import BaseCombat
 
@@ -33,8 +34,6 @@ BEST_RANGE: set[UnitTypeId] = {
     UnitTypeId.STALKER,
     UnitTypeId.ROACH,
 }
-
-KEEP_ALIVE: set[UnitTypeId] = {UnitTypeId.ZEALOT, UnitTypeId.ZERGLING}
 
 RETREAT_AT_PERC: float = 0.3
 
@@ -57,20 +56,28 @@ class VsGeneric(BaseCombat):
     config: dict
     mediator: ManagerMediator
     low_health_tags: set[int] = field(default_factory=set)
-    attack_target: Point2 = None
+    defensive_concave_positions: dict[int, Point2] = field(default_factory=dict)
     _assigned_units: bool = False
-    _calculated_siege_tank_spot: bool = False
+    _initial_setup: bool = False
     _defend_pylon: bool = False
     _high_ground_behavior: bool = True
 
     def execute(self, units: Units, grid: np.ndarray, **kwargs) -> None:
-        if self.ai.structures and not self._calculated_siege_tank_spot:
+        if self.ai.structures and self.ai.units and not self._initial_setup:
+            self._assign_units()
             self._calculate_siege_tank_spot()
-            self._calculated_siege_tank_spot = True
+            self._calculate_defensive_concave(
+                self.mediator.get_units_from_role(role=UnitRole.DEFENDING)
+            )
+            self._initial_setup = True
 
-        self._enemy_in_range_of_pylon()
-        self._update_attack_target()
-        self._assign_units()
+        if self.ai.state.game_loop < 140:
+            return
+
+        enemy_threats: Optional[Units] = self._enemy_in_range_of_pylon()
+        if enemy_threats and self.ai.get_total_supply(enemy_threats) >= 1.5:
+            self._defend_pylon = True
+
         self._should_do_high_ground_behavior()
 
         attackers: Units = self.mediator.get_units_from_role(role=UnitRole.ATTACKING)
@@ -78,7 +85,7 @@ class VsGeneric(BaseCombat):
 
         for unit in attackers:
             self.ai.register_behavior(
-                self._pylon_snipers(unit, grid, self.attack_target)
+                self._pylon_snipers(unit, grid, kwargs["attack_target"])
             )
 
         for unit in defenders:
@@ -86,27 +93,25 @@ class VsGeneric(BaseCombat):
                 # might want to put targeting behavior here later
                 continue
             else:
-                self.ai.register_behavior(self._protect_pylon(unit, grid))
+                self.ai.register_behavior(
+                    self._protect_pylon(unit, grid, enemy_threats)
+                )
 
     def _assign_units(self) -> None:
+        assign_attacking: bool = (
+            self.ai.race == Race.Zerg or self.ai.enemy_race != Race.Zerg
+        )
         if not self._assigned_units and self.ai.units:
             for i, unit in enumerate(self.ai.units):
-                # if (
-                #     self.ai.corrected_enemy_race != Race.Zerg
-                #     and not self._assigned_units
-                #     and unit.type_id not in BEST_RANGE
-                # ):
-                #     self.mediator.assign_role(tag=unit.tag, role=UnitRole.ATTACKING)
-                #     self._assigned_units = True
-                # else:
-                self.mediator.assign_role(tag=unit.tag, role=UnitRole.DEFENDING)
-
-    def _update_attack_target(self) -> None:
-        self.attack_target: Point2 = self.ai.game_info.map_center
-        if self.ai.enemy_structures:
-            self.attack_target: Point2 = cy_closest_to(
-                self.ai.game_info.map_center, self.ai.enemy_structures
-            ).position
+                if (
+                    assign_attacking
+                    and not self._assigned_units
+                    and unit.type_id not in BEST_RANGE
+                ):
+                    self.mediator.assign_role(tag=unit.tag, role=UnitRole.ATTACKING)
+                    self._assigned_units = True
+                else:
+                    self.mediator.assign_role(tag=unit.tag, role=UnitRole.DEFENDING)
 
     def _pylon_snipers(
         self, unit: Unit, grid: np.ndarray, target: Point2
@@ -115,46 +120,38 @@ class VsGeneric(BaseCombat):
         pylon_snipe_maneuver: CombatManeuver = CombatManeuver()
 
         pylon_snipe_maneuver.add(ShootTargetInRange(unit, self.ai.all_enemy_units))
-        if self.corrected_time > 25.0:
-            pylon_snipe_maneuver.add(KeepUnitSafe(unit, updated_grid))
         pylon_snipe_maneuver.add(
             PathUnitToTarget(unit, updated_grid, target, success_at_distance=3.0)
         )
+        if self.corrected_time > 25.0:
+            pylon_snipe_maneuver.add(KeepUnitSafe(unit, updated_grid))
         pylon_snipe_maneuver.add(AMove(unit, target))
 
         return pylon_snipe_maneuver
 
-    def _protect_pylon(self, unit: Unit, grid: np.ndarray) -> CombatManeuver:
+    def _protect_pylon(
+        self, unit: Unit, grid: np.ndarray, enemy_threats: Optional[Units]
+    ) -> CombatManeuver:
+
         if self._high_ground_behavior and unit.type_id in BEST_RANGE:
             return self._defensive_ranged_maneuver(unit, grid)
 
         protect_pylon: CombatManeuver = CombatManeuver()
-        # if unit.type_id in KEEP_ALIVE:
-        #     if unit.type_id == UnitTypeId.ZEALOT and unit.shield_percentage < 0.2:
-        #         self.low_health_tags.add(unit.tag)
-        #     elif (
-        #         unit.type_id == UnitTypeId.ZERGLING
-        #         and unit.health_percentage < RETREAT_AT_PERC
-        #     ):
-        #         self.low_health_tags.add(unit.tag)
-        #
-        #     if unit.tag in self.low_health_tags:
-        #         if self.ai.race == Race.Protoss and unit.shield_percentage > 0.55:
-        #             self.low_health_tags.remove(unit.tag)
-        #         if (
-        #             self.ai.race == Race.Zerg
-        #             and unit.health_percentage > RETREAT_AT_PERC + 0.15
-        #         ):
-        #             self.low_health_tags.remove(unit.tag)
-        #
-        #     if unit.tag in self.low_health_tags:
-        #         protect_pylon.add(KeepUnitSafe(unit, grid))
-        #         return protect_pylon
 
         if self._defend_pylon:
             in_range: Units = self.ai.all_enemy_units.in_attack_range_of(unit).filter(
                 lambda u: self.ai.is_visible(unit.position)
             )
+            if (
+                self.ai.race != Race.Zerg
+                and unit.type_id in BEST_RANGE
+                and enemy_threats
+            ):
+                if armored := enemy_threats.filter(lambda u: u.is_armored):
+                    target: Unit = cy_pick_enemy_target(armored)
+                    protect_pylon.add(StutterUnitBack(unit, target, grid=grid))
+                    return protect_pylon
+
             if len(in_range) > 0 and (unit.ground_range > 2.0):
                 target: Unit = cy_pick_enemy_target(in_range)
                 if target.is_structure:
@@ -179,19 +176,17 @@ class VsGeneric(BaseCombat):
             )
 
         protect_pylon.add(KeepUnitSafe(unit, grid))
-        if self.ai.structures:
-            if unit.type_id in BEST_RANGE:
-                dist = -4.0
-            else:
-                dist = -2.0
-            move_to: Point2 = Point2(
-                cy_towards(
-                    self.ai.structures[0].position, self.ai.game_info.map_center, dist
-                )
-            )
 
+        if unit.tag in self.defensive_concave_positions:
+            protect_pylon.add(AMove(unit, self.defensive_concave_positions[unit.tag]))
+        else:
             protect_pylon.add(
-                PathUnitToTarget(unit, grid, move_to, success_at_distance=1.4)
+                AMove(
+                    unit,
+                    self.ai.structures[0].position.towards(
+                        self.ai.enemy_structures[0].position, 3.0
+                    ),
+                )
             )
 
         return protect_pylon
@@ -208,13 +203,11 @@ class VsGeneric(BaseCombat):
             return defensive_ranged_maneuver
 
         move_to = self._tank_target_spot
-
-        if self._high_ground_behavior:
-            defensive_ranged_maneuver.add(
-                self.high_ground_behavior(
-                    unit, grid, target_armoured=self.ai.race != Race.Zerg
-                )
+        defensive_ranged_maneuver.add(
+            self.high_ground_behavior(
+                unit, grid, target_armoured=self.ai.race != Race.Zerg
             )
+        )
 
         if self._defend_pylon and self.ai.enemy_units:
             defensive_ranged_maneuver.add(AMove(unit, self.ai.structures[0].position))
@@ -262,19 +255,14 @@ class VsGeneric(BaseCombat):
         # avg_enemy_range: float = sum(u.ground_range for u in in_range) / len(in_range)
         # return unit_range < avg_enemy_range
 
-    def _enemy_in_range_of_pylon(self) -> None:
+    def _enemy_in_range_of_pylon(self) -> Optional[Units]:
         if everything_near_pylon := self.mediator.get_units_in_range(
             start_points=self.ai.structures,
-            distances=6.5,
+            distances=8.5,
             query_tree=UnitTreeQueryType.EnemyGround,
             return_as_dict=False,
         ):
-            near_pylon: Units = everything_near_pylon[0]
-            if self.ai.get_total_supply(near_pylon) >= 2:
-                self._defend_pylon = True
-            return
-
-        self._defend_pylon = False
+            return everything_near_pylon[0]
 
     def _should_do_high_ground_behavior(self):
         if self._high_ground_behavior and (
@@ -296,6 +284,8 @@ class VsGeneric(BaseCombat):
         ):
             map_data = self.mediator.get_map_data_object
             for point in path:
+                if cy_distance_to(point, self.ai.enemy_structures[0].position) < 10.0:
+                    continue
                 grid = map_data.add_cost(
                     position=(int(point.x), int(point.y)),
                     radius=4.5,
@@ -330,3 +320,34 @@ class VsGeneric(BaseCombat):
                     dist = d
 
         self._tank_target_spot = closest
+
+    def _calculate_defensive_concave(self, units: Units) -> None:
+        target_location: Point2 = self.ai.enemy_structures[0].position
+
+        setup_from: Point2 = self.ai.structures[0].position.towards(
+            target_location, 5.5
+        )
+        num_points = len(units)
+        distance_spread: float = num_points * 0.3
+        mid_value_depth = distance_spread * 0.6
+        mid_value: float = (
+            mid_value_depth if target_location.x < setup_from.x else -mid_value_depth
+        )
+        point_a: Point2 = Point2((setup_from[0], setup_from[1] - distance_spread))
+        mid_point: Point2 = Point2((setup_from[0] + mid_value, setup_from[1]))
+        point_b: Point2 = Point2((setup_from[0], setup_from[1] + distance_spread))
+
+        points = np.array(
+            [[point_a.x, mid_point.x, point_b.x], [point_a.y, mid_point.y, point_b.y]]
+        ).T
+
+        distance = np.cumsum(np.sqrt(np.sum(np.diff(points, axis=0) ** 2, axis=1)))
+        distance = np.insert(distance, 0, 0) / distance[-1]
+
+        alpha = np.linspace(0, 1, num_points)
+
+        interpolator = interp1d(distance, points, kind="quadratic", axis=0)
+        points = interpolator(alpha)
+
+        for pos, unit in zip(points, units):
+            self.defensive_concave_positions[unit.tag] = Point2((pos[0], pos[1]))
