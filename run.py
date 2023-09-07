@@ -30,7 +30,7 @@ MY_BOT_NAME: str = "MyBotName"
 MY_BOT_RACE: str = "MyBotRace"
 
 
-class DoNothingBot(BotAI):
+class DummyBot(BotAI):
     def __init__(self):
         super().__init__()
 
@@ -40,22 +40,8 @@ class DoNothingBot(BotAI):
             target = self.enemy_start_locations[0]
         elif self.enemy_structures:
             target = self.enemy_structures.first.position
-        # if self.race == Race.Terran and self.units:
-        #     for unit in self.units:
-        #         if unit.type_id == UnitTypeId.SIEGETANK:
-        #             pos = self.structures.first.position.towards(
-        #                 self.enemy_structures[0].position, 3.0)
-        #             if unit.distance_to(pos) > 1.0:
-        #                 unit.move(pos)
-        #             else:
-        #                 unit(AbilityId.SIEGEMODE_SIEGEMODE)
-        #         elif not unit.is_attacking:
-        #             pos = self.structures.first.position
-        #             if unit.distance_to(pos) > 2.0:
-        #                 unit.move(pos)
-        #
-        # else:
-        for unit in self.units.idle:
+
+        for unit in self.units:
             unit.attack(target)
 
 
@@ -75,7 +61,7 @@ def main():
                 race = Race[config[MY_BOT_RACE].title()]
 
     bot1 = Bot(race, MyBot(), bot_name)
-    bot2 = Bot(Race.Random, DoNothingBot())
+    bot2 = Bot(Race.Zerg, DummyBot())
 
     if "--LadderServer" in sys.argv:
         # Ladder game started by LadderManager
@@ -86,7 +72,7 @@ def main():
         # Local game
         # alternative example code if finding the map path is problematic
         map_list: List[str] = [
-            "BotMicroArena_4",
+            "BotMicroArena_6",
             # "BerlingradAIE"
         ]
 

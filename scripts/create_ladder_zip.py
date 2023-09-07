@@ -3,14 +3,14 @@ Zips the relevant files and directories so that Eris
 can be uploaded to ladder and tournaments.
 TODO: check all files and folders are present before zipping
 """
+import os
 import platform
+import shutil
+import site
+import zipfile
 from os import path, remove, walk
 from subprocess import Popen, run
 from typing import Dict, List, Tuple
-import shutil
-import os
-import zipfile
-import site
 
 import yaml
 

@@ -17,5 +17,5 @@ DebugOptions:
     ActiveGrid: Ground
     ChatDebug: True
     DebugSpawn: False
-    ShowPathingCost: False
+    ShowPathingCost: True
     ResourceDebug: False
