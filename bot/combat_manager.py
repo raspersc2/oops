@@ -130,8 +130,8 @@ class CombatManager:
         )
 
     def _assign_initial_units(self) -> None:
-        assign_attacking: bool = (
-            self.ai.race == Race.Zerg or self.ai.enemy_race != Race.Zerg
+        assign_attacking: bool = self.ai.race != Race.Protoss and (
+            self.ai.race == Race.Zerg or self.ai.enemy_race == Race.Protoss
         )
         if not self._assigned_units and self.ai.units:
             assigned_harass: bool = False

@@ -9,8 +9,13 @@ from sc2.units import Units
 
 from ares import ManagerMediator
 from ares.behaviors.combat import CombatManeuver
-from ares.behaviors.combat.individual import AMove, AttackTarget, PathUnitToTarget
-from ares.cython_extensions.combat_utils import cy_pick_enemy_target
+from ares.behaviors.combat.individual import (
+    AMove,
+    PathUnitToTarget,
+    ShootTargetInRange,
+    KeepUnitSafe,
+)
+
 from ares.cython_extensions.geometry import cy_towards
 from bot.combat.base_combat import BaseCombat
 
@@ -70,15 +75,7 @@ class HighGroundCombat(BaseCombat):
                 high_ground_maneuver.add(AMove(unit, attack_target))
 
             elif self._move_to_high_ground:
-                high_ground_maneuver.add(
-                    self.high_ground_behavior(
-                        unit,
-                        enemy_vision_of_high_ground,
-                        grid,
-                        move_to,
-                        self.ai.race != Race.Zerg,
-                    )
-                )
+                high_ground_maneuver.add(self.high_ground_behavior(unit, grid, move_to))
             elif should_defend:
                 high_ground_maneuver.add(
                     self.defend_position_behavior(unit, self.ai.race != Race.Zerg)
@@ -100,26 +97,20 @@ class HighGroundCombat(BaseCombat):
     def high_ground_behavior(
         self,
         unit: Unit,
-        enemy_vision_of_high_ground: bool,
         grid: np.ndarray,
         move_to: Point2,
-        target_armoured: bool,
     ) -> CombatManeuver:
         high_ground_maneuver: CombatManeuver = CombatManeuver()
         if self.ai.enemy_units:
-            in_range: Units = self.ai.all_enemy_units.in_attack_range_of(unit)
-            in_range = in_range.filter(lambda u: self.ai.is_visible(u.position))
-            if len(in_range) > 0:
-                target: Unit
-                if target_armoured:
-                    if armour := in_range.filter(lambda u: u.is_armored):
-                        target = cy_pick_enemy_target(armour)
-                    else:
-                        target: Unit = cy_pick_enemy_target(in_range)
-                else:
-                    target: Unit = cy_pick_enemy_target(in_range)
-
-                high_ground_maneuver.add(AttackTarget(unit, target))
+            high_ground_maneuver.add(
+                ShootTargetInRange(
+                    unit,
+                    self.ai.all_enemy_units.filter(
+                        lambda u: self.ai.is_visible(u.position)
+                    ),
+                )
+            )
+            high_ground_maneuver.add(KeepUnitSafe(unit, grid))
         else:
             high_ground_maneuver.add(PathUnitToTarget(unit, grid, move_to))
 
