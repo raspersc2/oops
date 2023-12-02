@@ -54,7 +54,7 @@ class ProtectPosition(BaseCombat):
         should_defend: bool = kwargs["should_defend"]
 
         if not self._initial_setup and self.ai.structures and self.ai.units:
-            self._calculate_defensive_concave(units)
+            self._calculate_defensive_concave(units, defend_position)
             self._initial_setup = True
 
         for unit in units:
@@ -108,14 +108,14 @@ class ProtectPosition(BaseCombat):
             defensive_engagement.add(AMove(unit, target))
         return defensive_engagement
 
-    def _calculate_defensive_concave(self, units: Units) -> None:
+    def _calculate_defensive_concave(self, units: Units, defend_position: Point2) -> None:
         target_location: Point2 = self.ai.enemy_structures[0].position
 
-        setup_from: Point2 = self.ai.structures[0].position.towards(
+        setup_from: Point2 = defend_position.position.towards(
             target_location, 5.5
         )
         num_points = len(units)
-        distance_spread: float = num_points * 0.3
+        distance_spread: float = num_points * 0.35
         mid_value_depth = distance_spread * 0.6
         mid_value: float = (
             mid_value_depth if target_location.x < setup_from.x else -mid_value_depth

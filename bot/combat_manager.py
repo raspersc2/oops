@@ -64,9 +64,23 @@ class CombatManager:
             return self.ai.game_info.map_center
         return self.ai.structures[0].position
 
+    @property
+    def close_ramp(self) -> bool:
+        return cy_distance_to(self.ramps_sorted_to_spawn[0].bottom_center, self.home) < 8.5
+
+    @property
+    def defend_position(self) -> Point2:
+        if not self.ai.structures:
+            return self.ai.game_info.map_center
+
+        if self.close_ramp:
+            return self.ramps_sorted_to_spawn[0].top_center
+        else:
+            return self.ai.structures[0].position
+
     def _enemy_in_range_of_pylon(self) -> Optional[Units]:
         if everything_near_pylon := self.mediator.get_units_in_range(
-            start_points=self.ai.structures,
+            start_points=[self.defend_position],
             distances=8.5,
             query_tree=UnitTreeQueryType.EnemyGround,
             return_as_dict=False,
@@ -103,7 +117,7 @@ class CombatManager:
                 high_ranged,
                 grid,
                 attack_target=self.attack_target,
-                defend_position=self.home,
+                defend_position=self.defend_position,
                 move_to=self._close_high_ground_spots[0],
                 should_defend=self._defend_pylon,
             )
@@ -111,7 +125,7 @@ class CombatManager:
                 remaining,
                 grid,
                 enemy_at_position=self._enemy_in_range_of_pylon(),
-                defend_position=self.home,
+                defend_position=self.defend_position,
                 should_defend=self._defend_pylon,
             )
         else:
@@ -119,7 +133,7 @@ class CombatManager:
                 defenders,
                 grid,
                 enemy_at_position=self._enemy_in_range_of_pylon(),
-                defend_position=self.home,
+                defend_position=self.defend_position,
                 should_defend=self._defend_pylon,
             )
 
@@ -153,6 +167,10 @@ class CombatManager:
             pass
 
     def _should_do_high_ground_behavior(self):
+        if self.close_ramp:
+            self._high_ground_behavior = False
+            return
+
         if self._high_ground_behavior and (
             self.ai.corrected_enemy_race == Race.Zerg
             or self._defend_pylon
@@ -187,7 +205,7 @@ class CombatManager:
             new_start_spot = self.ai.game_info.map_center
             closest = self.ai.game_info.map_center
             dist = 999.9
-            for point in ramp.buildables.points:
+            for point in ramp.points:
                 if self.ai.get_terrain_height(point) > self.ai.get_terrain_height(
                     start_spot
                 ):

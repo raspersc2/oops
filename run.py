@@ -7,8 +7,6 @@ from typing import List
 from sc2 import maps
 from sc2.bot_ai import BotAI
 from sc2.data import AIBuild, Difficulty, Race
-from sc2.ids.ability_id import AbilityId
-from sc2.ids.unit_typeid import UnitTypeId
 from sc2.main import run_game
 from sc2.player import Bot, Computer
 
@@ -34,14 +32,13 @@ class DummyBot(BotAI):
     def __init__(self):
         super().__init__()
 
-    async def on_step(self, iteration):
+    async def on_step(self, iteration: int):
         target = self.game_info.map_center
         if self.enemy_start_locations:
             target = self.enemy_start_locations[0]
         elif self.enemy_structures:
             target = self.enemy_structures.first.position
-
-        for unit in self.units:
+        for unit in self.units.idle:
             unit.attack(target)
 
 
@@ -61,7 +58,7 @@ def main():
                 race = Race[config[MY_BOT_RACE].title()]
 
     bot1 = Bot(race, MyBot(), bot_name)
-    bot2 = Bot(Race.Zerg, DummyBot())
+    bot2 = Bot(Race.Terran, DummyBot())
 
     if "--LadderServer" in sys.argv:
         # Ladder game started by LadderManager
@@ -72,8 +69,8 @@ def main():
         # Local game
         # alternative example code if finding the map path is problematic
         map_list: List[str] = [
-            "BotMicroArena_6",
-            # "BerlingradAIE"
+            "PlateauMicro_1"
+            # "BotMicroArena_6",
         ]
 
         random_race = random.choice([Race.Zerg, Race.Terran, Race.Protoss])

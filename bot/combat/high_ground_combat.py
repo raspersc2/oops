@@ -75,7 +75,11 @@ class HighGroundCombat(BaseCombat):
                 high_ground_maneuver.add(AMove(unit, attack_target))
 
             elif self._move_to_high_ground:
-                high_ground_maneuver.add(self.high_ground_behavior(unit, grid, move_to))
+                high_ground_maneuver.add(
+                    self.high_ground_behavior(
+                        unit, grid, move_to, enemy_vision_of_high_ground
+                    )
+                )
             elif should_defend:
                 high_ground_maneuver.add(
                     self.defend_position_behavior(unit, self.ai.race != Race.Zerg)
@@ -99,6 +103,7 @@ class HighGroundCombat(BaseCombat):
         unit: Unit,
         grid: np.ndarray,
         move_to: Point2,
+        enemy_vision_of_high_ground: bool,
     ) -> CombatManeuver:
         high_ground_maneuver: CombatManeuver = CombatManeuver()
         if self.ai.enemy_units:
@@ -110,7 +115,8 @@ class HighGroundCombat(BaseCombat):
                     ),
                 )
             )
-            high_ground_maneuver.add(KeepUnitSafe(unit, grid))
+            if enemy_vision_of_high_ground:
+                high_ground_maneuver.add(KeepUnitSafe(unit, grid))
         else:
             high_ground_maneuver.add(PathUnitToTarget(unit, grid, move_to))
 
