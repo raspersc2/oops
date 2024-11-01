@@ -69,8 +69,9 @@ def main():
         # Local game
         # alternative example code if finding the map path is problematic
         map_list: List[str] = [
-            "PlateauMicro_1"
+            # "PlateauMicro_1"
             # "BotMicroArena_6",
+            "Tier1MicroAIArena_a4"
         ]
 
         random_race = random.choice([Race.Zerg, Race.Terran, Race.Protoss])
@@ -79,7 +80,8 @@ def main():
             maps.get(random.choice(map_list)),
             [
                 bot1,
-                bot2,
+                # bot2,
+                Computer(random_race, Difficulty.VeryEasy, ai_build=AIBuild.Macro),
             ],
             realtime=False,
         )

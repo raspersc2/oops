@@ -16,8 +16,7 @@ from ares.behaviors.combat.individual import (
     ShootTargetInRange,
     KeepUnitSafe,
 )
-from ares.cython_extensions.combat_utils import cy_pick_enemy_target
-from ares.cython_extensions.units_utils import cy_closest_to
+from cython_extensions import cy_pick_enemy_target, cy_closest_to
 from bot.combat.base_combat import BaseCombat
 from bot.consts import BEST_RANGE
 
@@ -108,12 +107,12 @@ class ProtectPosition(BaseCombat):
             defensive_engagement.add(AMove(unit, target))
         return defensive_engagement
 
-    def _calculate_defensive_concave(self, units: Units, defend_position: Point2) -> None:
+    def _calculate_defensive_concave(
+        self, units: Units, defend_position: Point2
+    ) -> None:
         target_location: Point2 = self.ai.enemy_structures[0].position
 
-        setup_from: Point2 = defend_position.position.towards(
-            target_location, 5.5
-        )
+        setup_from: Point2 = defend_position.position.towards(target_location, 5.5)
         num_points = len(units)
         distance_spread: float = num_points * 0.35
         mid_value_depth = distance_spread * 0.6

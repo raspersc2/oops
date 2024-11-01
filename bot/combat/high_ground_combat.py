@@ -16,7 +16,7 @@ from ares.behaviors.combat.individual import (
     KeepUnitSafe,
 )
 
-from ares.cython_extensions.geometry import cy_towards
+from cython_extensions import cy_towards
 from bot.combat.base_combat import BaseCombat
 
 if TYPE_CHECKING:

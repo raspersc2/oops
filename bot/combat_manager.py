@@ -8,9 +8,9 @@ from sc2.units import Units
 
 from ares import ManagerMediator
 from ares.consts import UnitRole, UnitTreeQueryType
-from ares.cython_extensions.geometry import cy_distance_to
-from ares.cython_extensions.units_utils import cy_closest_to
+from cython_extensions import cy_distance_to, cy_closest_to
 from bot.combat.base_combat import BaseCombat
+from bot.combat.generic_engagement import GenericEngagement
 from bot.consts import BEST_RANGE
 from bot.combat.harass_pylon import HarassPylon
 from bot.combat.high_ground_combat import HighGroundCombat
@@ -66,7 +66,9 @@ class CombatManager:
 
     @property
     def close_ramp(self) -> bool:
-        return cy_distance_to(self.ramps_sorted_to_spawn[0].bottom_center, self.home) < 8.5
+        return (
+            cy_distance_to(self.ramps_sorted_to_spawn[0].bottom_center, self.home) < 8.5
+        )
 
     @property
     def defend_position(self) -> Point2:
@@ -88,6 +90,23 @@ class CombatManager:
             return everything_near_pylon[0]
 
     def execute(self):
+        map_name: str = self.ai.game_info.map_name.upper()
+        if (
+            "BOT MICRO ARENA" not in map_name and "PLATEAU MICRO" not in map_name
+        ) or not self.mediator.get_map_data_object.map_ramps:
+            for unit in self.ai.units:
+                all_close_enemy: Units = self.mediator.get_units_in_range(
+                    start_points=[self.ai.units.center],
+                    distances=100.2,
+                    query_tree=UnitTreeQueryType.AllEnemy,
+                )[0]
+                if all_close_enemy:
+                    self.ai.register_behavior(
+                        GenericEngagement(unit, all_close_enemy, False)
+                    )
+
+            return
+
         if self.ai.structures and self.ai.units and not self._initial_setup:
             self._assign_initial_units()
             self._calculate_high_ground_spots()

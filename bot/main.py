@@ -2,7 +2,7 @@ from typing import Optional
 
 from ares import AresBot
 from ares.consts import ALL_STRUCTURES
-from ares.cython_extensions.units_utils import cy_closest_to
+from cython_extensions.units_utils import cy_closest_to
 from ares.dicts.unit_data import UNIT_DATA
 from sc2.data import Race
 from sc2.position import Point2
