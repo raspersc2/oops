@@ -181,13 +181,14 @@ class CombatManager:
                         and u.tag != unit.tag
                         and u.tag not in self._transfused_tags
                     ]
-                    maneuver.add(
-                        UseAbility(
-                            AbilityId.TRANSFUSION_TRANSFUSION,
-                            unit,
-                            transfuse_targets[0],
+                    if transfuse_targets:
+                        maneuver.add(
+                            UseAbility(
+                                AbilityId.TRANSFUSION_TRANSFUSION,
+                                unit,
+                                transfuse_targets[0],
+                            )
                         )
-                    )
 
                 # catch all that works for most things
                 maneuver.add(GenericEngagement(unit, all_close_enemy, False))
