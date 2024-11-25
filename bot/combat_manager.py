@@ -1,14 +1,19 @@
 from typing import TYPE_CHECKING, Optional
 
 import numpy as np
+from sc2.ids.ability_id import AbilityId
+from sc2.ids.unit_typeid import UnitTypeId as UnitID
 from sc2.data import Race
 from sc2.position import Point2
 from sc2.unit import Unit
 from sc2.units import Units
 
 from ares import ManagerMediator
+from ares.behaviors.combat import CombatManeuver
+from ares.behaviors.combat.individual import StutterUnitBack, UseAbility
 from ares.consts import UnitRole, UnitTreeQueryType
 from cython_extensions import cy_distance_to, cy_closest_to
+
 from bot.combat.base_combat import BaseCombat
 from bot.combat.generic_engagement import GenericEngagement
 from bot.consts import BEST_RANGE
@@ -21,6 +26,8 @@ if TYPE_CHECKING:
 
 
 class CombatManager:
+    MELEE_FLEE_AT_PERC: float = 0.3
+
     """
     Store combat related state.
     And orchestrate the combat classes
@@ -48,6 +55,7 @@ class CombatManager:
         self._high_ground_combat: BaseCombat = HighGroundCombat(ai, config, mediator)
         self._protect_pylon: BaseCombat = ProtectPosition(ai, config, mediator)
         self._unreachable_cells = None
+        self._transfused_tags: set[int] = set()
 
     @property
     def attack_target(self) -> Point2:
@@ -91,38 +99,99 @@ class CombatManager:
 
     def execute(self):
         map_name: str = self.ai.game_info.map_name.upper()
+        # on new micro arena maps
         if (
             "BOT MICRO ARENA" not in map_name and "PLATEAU MICRO" not in map_name
         ) or not self.mediator.get_map_data_object.map_ramps:
-            for unit in self.ai.units:
-                all_close_enemy: Units = self.mediator.get_units_in_range(
-                    start_points=[self.ai.units.center],
-                    distances=100.2,
-                    query_tree=UnitTreeQueryType.AllEnemy,
-                )[0]
-                if all_close_enemy:
-                    self.ai.register_behavior(
-                        GenericEngagement(unit, all_close_enemy, False)
+            self._new_micro_arena_combat()
+        # on the old original micro map with a pylon / ramps
+        else:
+            if self.ai.structures and self.ai.units and not self._initial_setup:
+                self._assign_initial_units()
+                self._calculate_high_ground_spots()
+                self._initial_setup = True
+
+            if not self._initial_setup:
+                return
+
+            self._should_do_high_ground_behavior()
+
+            enemy_threats: Optional[Units] = self._enemy_in_range_of_pylon()
+            if enemy_threats and self.ai.get_total_supply(enemy_threats) >= 1.5:
+                self._defend_pylon = True
+            grid = self.mediator.get_ground_grid
+
+            self._execute_combat(grid)
+
+    def _new_micro_arena_combat(self) -> None:
+        self._transfused_tags = set()
+
+        # TODO: stutter forward
+        for unit in self.ai.units:
+            all_close_enemy: Units = self.mediator.get_units_in_range(
+                start_points=[self.ai.units.center],
+                distances=100.2,
+                query_tree=UnitTreeQueryType.AllEnemy,
+            )[0]
+
+            if all_close_enemy:
+                maneuver: CombatManeuver = CombatManeuver()
+                # work out if all enemy are melee
+                all_enemy_melee: bool = all(
+                    [
+                        u
+                        for u in all_close_enemy
+                        if not u.is_flying and u.ground_range < 3.0
+                    ]
+                )
+                # melee vs melee fight, kite back weak units
+                if (
+                    all_enemy_melee
+                    and unit.ground_range < 3.0
+                    and unit.shield_health_percentage <= self.MELEE_FLEE_AT_PERC
+                ):
+                    target: Unit = cy_closest_to(unit.position, all_close_enemy)
+                    maneuver.add(StutterUnitBack(unit, target))
+
+                # ravager bile
+                # TODO: improve
+                if (
+                    unit.type_id == UnitID.RAVAGER
+                    and AbilityId.EFFECT_CORROSIVEBILE in unit.abilities
+                ):
+                    maneuver.add(
+                        UseAbility(
+                            AbilityId.EFFECT_CORROSIVEBILE,
+                            unit,
+                            cy_closest_to(unit.position, all_close_enemy).position,
+                        )
                     )
 
-            return
+                # queens transfuse
+                if (
+                    unit.type_id == UnitID.QUEEN
+                    and AbilityId.TRANSFUSION_TRANSFUSION in unit.abilities
+                ):
+                    transfuse_targets: list[Unit] = [
+                        u
+                        for u in self.ai.units
+                        if u.health_percentage < 0.4
+                        and cy_distance_to(unit.position, u.position)
+                        < 7.0 + unit.radius + u.radius
+                        and u.tag != unit.tag
+                        and u.tag not in self._transfused_tags
+                    ]
+                    maneuver.add(
+                        UseAbility(
+                            AbilityId.TRANSFUSION_TRANSFUSION,
+                            unit,
+                            transfuse_targets[0],
+                        )
+                    )
 
-        if self.ai.structures and self.ai.units and not self._initial_setup:
-            self._assign_initial_units()
-            self._calculate_high_ground_spots()
-            self._initial_setup = True
-
-        if not self._initial_setup:
-            return
-
-        self._should_do_high_ground_behavior()
-
-        enemy_threats: Optional[Units] = self._enemy_in_range_of_pylon()
-        if enemy_threats and self.ai.get_total_supply(enemy_threats) >= 1.5:
-            self._defend_pylon = True
-        grid = self.mediator.get_ground_grid
-
-        self._execute_combat(grid)
+                # catch all that works for most things
+                maneuver.add(GenericEngagement(unit, all_close_enemy, False))
+                self.ai.register_behavior(maneuver)
 
     def _execute_combat(self, grid: np.ndarray) -> None:
         defenders: Units = self.mediator.get_units_from_role(role=UnitRole.DEFENDING)
