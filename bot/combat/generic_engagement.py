@@ -2,12 +2,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Union
 
 import numpy as np
+from sc2.data import Race
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId as UnitID
 from sc2.position import Point2
 
 from ares import ManagerMediator
-from ares.behaviors.combat.individual import CombatIndividualBehavior
+from ares.behaviors.combat.individual import CombatIndividualBehavior, KeepUnitSafe
 from ares.consts import ALL_STRUCTURES
 from ares.behaviors.combat.individual import (
     AMove,
@@ -15,7 +16,7 @@ from ares.behaviors.combat.individual import (
     StutterUnitForward,
     UseAbility,
 )
-from cython_extensions import cy_closest_to
+from cython_extensions import cy_closest_to, cy_distance_to
 from sc2.unit import Unit
 from sc2.units import Units
 
@@ -101,6 +102,18 @@ class GenericEngagement(CombatIndividualBehavior):
             grid: np.ndarray = mediator.get_ground_grid
             if unit.is_flying:
                 grid = mediator.get_air_grid
+
+            if (
+                unit.type_id != UnitID.BANELING
+                and unit.is_light
+                and [
+                    e
+                    for e in self.nearby_targets
+                    if e.type_id == UnitID.BANELING
+                    and cy_distance_to(unit.position, e.position) < 3.8
+                ]
+            ):
+                return KeepUnitSafe(unit, grid).execute(ai, config, mediator)
             if self.unit.ground_range < 3.0:
                 return AMove(unit=unit, target=enemy_target).execute(
                     ai, config, mediator
@@ -119,6 +132,26 @@ class GenericEngagement(CombatIndividualBehavior):
                         target=safe_spot,
                     ).execute(ai, config, mediator)
                 else:
-                    return StutterUnitBack(
-                        unit=unit, target=enemy_target, grid=grid
-                    ).execute(ai, config, mediator)
+                    # low health, but we are faster and have more range
+                    # always stay out of danger where possible
+                    enemy_speed: float = enemy_target.movement_speed
+                    if ai.enemy_race == Race.Zerg and ai.has_creep(
+                        enemy_target.position
+                    ):
+                        enemy_speed *= 1.3
+                    own_speed: float = unit.movement_speed
+                    if ai.race == Race.Zerg and ai.has_creep(unit.position):
+                        own_speed *= 1.3
+                    if (
+                        not enemy_target.is_flying
+                        and own_speed > enemy_speed
+                        and unit.ground_range > enemy_target.ground_range
+                        and unit.shield_health_percentage < 0.25
+                        and cy_distance_to(unit.position, enemy_target.position)
+                        < enemy_target.ground_range + enemy_target.radius + unit.radius
+                    ):
+                        return KeepUnitSafe(unit, grid).execute(ai, config, mediator)
+                    else:
+                        return StutterUnitBack(
+                            unit=unit, target=enemy_target, grid=grid
+                        ).execute(ai, config, mediator)

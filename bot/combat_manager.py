@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 from sc2.ids.ability_id import AbilityId
-from sc2.ids.unit_typeid import UnitTypeId as UnitID
+from sc2.ids.unit_typeid import UnitTypeId as UnitID, UnitTypeId
 from sc2.data import Race
 from sc2.position import Point2
 from sc2.unit import Unit
@@ -10,9 +10,9 @@ from sc2.units import Units
 
 from ares import ManagerMediator
 from ares.behaviors.combat import CombatManeuver
-from ares.behaviors.combat.individual import StutterUnitBack, UseAbility
+from ares.behaviors.combat.individual import StutterUnitBack, UseAbility, AttackTarget
 from ares.consts import UnitRole, UnitTreeQueryType
-from cython_extensions import cy_distance_to, cy_closest_to
+from cython_extensions import cy_distance_to, cy_closest_to, cy_in_attack_range
 
 from bot.combat.base_combat import BaseCombat
 from bot.combat.generic_engagement import GenericEngagement
@@ -56,6 +56,8 @@ class CombatManager:
         self._protect_pylon: BaseCombat = ProtectPosition(ai, config, mediator)
         self._unreachable_cells = None
         self._transfused_tags: set[int] = set()
+
+        self._unit_tag_to_bane_tag: dict = dict()
 
     @property
     def attack_target(self) -> Point2:
@@ -125,17 +127,26 @@ class CombatManager:
 
     def _new_micro_arena_combat(self) -> None:
         self._transfused_tags = set()
-
-        # TODO: stutter forward
-        for unit in self.ai.units:
+        all_close_enemy: Units = Units([], self.ai)
+        if self.ai.units:
             all_close_enemy: Units = self.mediator.get_units_in_range(
                 start_points=[self.ai.units.center],
                 distances=100.2,
                 query_tree=UnitTreeQueryType.AllEnemy,
             )[0]
 
+        if all_close_enemy:
+            self._assign_units_to_banes(all_close_enemy)
+
+        # TODO: stutter forward
+        for unit in self.ai.units:
             if all_close_enemy:
                 maneuver: CombatManeuver = CombatManeuver()
+                if unit.tag in self._unit_tag_to_bane_tag:
+                    bane_tag: int = self._unit_tag_to_bane_tag[unit.tag]
+                    if bane := self.ai.unit_tag_dict.get(bane_tag):
+                        maneuver.add(AttackTarget(unit, bane))
+
                 # work out if all enemy are melee
                 all_enemy_melee: bool = all(
                     [
@@ -303,3 +314,27 @@ class CombatManager:
                         closest = point
                         dist = d
             self._close_high_ground_spots.append(closest)
+
+    def _assign_units_to_banes(self, all_close_enemy: Units) -> None:
+        if not self.ai.units:
+            return
+        banes: Units = all_close_enemy(UnitID.BANELING)
+
+        for bane in banes:
+            assigned_bane_tags: set[int] = set(self._unit_tag_to_bane_tag.values())
+            if bane.tag not in assigned_bane_tags:
+                for unit in self.ai.units:
+                    if (
+                        unit.type_id != UnitTypeId.BANELING
+                        and unit.is_light
+                        and unit.tag not in self._unit_tag_to_bane_tag
+                    ):
+                        self._unit_tag_to_bane_tag[unit.tag] = bane.tag
+                        break
+        to_remove: list[int] = []
+        for unit_tag in self._unit_tag_to_bane_tag:
+            if not self.ai.unit_tag_dict.get(unit_tag):
+                to_remove.append(unit_tag)
+
+        for tag in to_remove:
+            del self._unit_tag_to_bane_tag[tag]
