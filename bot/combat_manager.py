@@ -25,7 +25,7 @@ class CombatManager:
     Store combat related state.
     And orchestrate the combat classes
 
-        Parameters
+    Parameters
     ----------
     ai : AresBot
         Bot object that will be running the game

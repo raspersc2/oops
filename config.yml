@@ -4,13 +4,13 @@
 
 # Custom values not used by ares
 MyBotName: oops
-MyBotRace: Protoss
+MyBotRace: Random
 ########################
 
 UseData: False
 Debug: False
-GameStep: 1
-DebugGameStep: 1
+GameStep: 2
+DebugGameStep: 2
 
 DebugOptions:
     # one of: Air, AirVsGround, Ground, GroundAvoidance, AirAvoidance

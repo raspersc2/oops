@@ -33,6 +33,7 @@ from sc2.unit import Unit
 from sc2.units import Units
 
 from bot.combat_squads.squad.base_squad import BaseSquad
+from bot.combat_squads.squad.feed_back import FeedBack
 
 
 @dataclass
@@ -109,20 +110,19 @@ class SquadEngagement(BaseSquad):
                 and (unit.can_attack or unit.type_id == UnitID.BANELING)
             ) or unit.is_hallucination:
                 combat_maneuver.add(AMove(unit=unit, target=target))
-            # use any aoe abilities
-            elif aoe_ability := self._use_aoe_ability(unit, enemy):
-                combat_maneuver.add(aoe_ability)
             # sentry hallucinate units
             elif hallucinate := self._use_hallucinate(unit, target):
                 combat_maneuver.add(hallucinate)
             # default attacking logic
-            else:
+            elif unit.can_attack:
                 combat_maneuver.add(ShootTargetInRange(unit, enemy))
                 combat_maneuver.add(
                     StutterUnitBack(
                         unit, cy_closest_to(unit.position, enemy), grid=grid
                     )
                 )
+            else:
+                combat_maneuver.add(AMove(unit=unit, target=squad.squad_position))
 
             self.ai.register_behavior(combat_maneuver)
 
@@ -190,10 +190,13 @@ class SquadEngagement(BaseSquad):
     ) -> CombatManeuver:
         if self.mediator.is_position_safe(grid=grid, position=unit.position):
             combat_maneuver.add(GhostSnipe(unit, enemy))
+        combat_maneuver.add(FeedBack(unit, enemy, 4.5))
+        if aoe_ability := self._use_aoe_ability(unit, enemy):
+            combat_maneuver.add(aoe_ability)
 
-        combat_maneuver.add(SiegeTankDecision(unit, enemy, target))
+        # combat_maneuver.add(SiegeTankDecision(unit, enemy, target))
         combat_maneuver.add(RavenAutoTurret(unit, enemy))
-        combat_maneuver.add(MedivacHeal(unit, squad.squad_units, grid))
+        combat_maneuver.add(MedivacHeal(unit, squad.squad_units, grid, keep_safe=False))
 
         combat_maneuver.add(UseTransfuse(unit, squad.squad_units, extra_range=1.5))
 

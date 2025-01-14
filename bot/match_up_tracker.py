@@ -93,7 +93,8 @@ class MatchUpTracker:
                         for unit_type in self.active_match_up.enemy_unit_types
                     )}"""
                 )
-                await self.ai.chat_send(formatted_tag)
+                logger.info(formatted_tag)
+                # await self.ai.chat_send(formatted_tag)
                 if (has_enemy and has_own) or (not has_enemy and not has_own):
                     await self.ai.chat_send(f"Tag: Round {round_number} - Tie")
                 elif has_own:
