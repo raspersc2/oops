@@ -8,8 +8,8 @@ MyBotRace: Protoss
 ########################
 
 UseData: False
-Debug: True
-GameStep: 2
+Debug: False
+GameStep: 1
 DebugGameStep: 1
 
 DebugOptions:
