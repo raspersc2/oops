@@ -26,10 +26,6 @@ class BaseCombat(Protocol):
     config: dict
     mediator: ManagerMediator
 
-    @property
-    def corrected_time(self) -> float:
-        return self.ai.time * 1.4
-
     def execute(
         self, units: Union[list[Unit], Units], grid: np.ndarray, **kwargs
     ) -> None:

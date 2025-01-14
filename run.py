@@ -10,6 +10,12 @@ from sc2.data import AIBuild, Difficulty, Race
 from sc2.main import run_game
 from sc2.player import Bot, Computer
 
+"""
+export SC2PATH="/home/tom/Games/battlenet/drive_c/Program Files (x86)/StarCraft II/"
+
+export SC2PF=WineLinux
+export WINE=/home/tom/.local/share/lutris/runners/wine/wine-ge-8-26-x86_64/bin/wine64
+"""
 sys.path.append("ares-sc2/src/ares")
 sys.path.append("ares-sc2/src")
 sys.path.append("ares-sc2")
@@ -69,9 +75,8 @@ def main():
         # Local game
         # alternative example code if finding the map path is problematic
         map_list: List[str] = [
-            # "PlateauMicro_1"
-            # "BotMicroArena_6",
-            "Tier1MicroAIArena_a4"
+            # "Tier1MicroAIArena_v4",
+            "Tier2MicroAIArena_v3"
         ]
 
         random_race = random.choice([Race.Zerg, Race.Terran, Race.Protoss])
@@ -81,7 +86,7 @@ def main():
             [
                 bot1,
                 # bot2,
-                Computer(random_race, Difficulty.VeryEasy, ai_build=AIBuild.Macro),
+                Computer(Race.Random, Difficulty.VeryEasy, ai_build=AIBuild.Macro),
             ],
             realtime=False,
         )

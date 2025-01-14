@@ -1,18 +1,21 @@
 from typing import Optional
 
-from ares import AresBot
+from ares import AresBot, UnitRole
 from ares.consts import ALL_STRUCTURES
-from cython_extensions.units_utils import cy_closest_to
 from ares.dicts.unit_data import UNIT_DATA
+from cython_extensions.units_utils import cy_closest_to
 from sc2.data import Race
 from sc2.position import Point2
+from sc2.unit import Unit
 from sc2.units import Units
 
 from bot.combat_manager import CombatManager
+from bot.match_up_tracker import MatchUpTracker
 
 
 class MyBot(AresBot):
     combat_manager: CombatManager
+    match_up_tracker: MatchUpTracker
 
     def __init__(self, game_step_override: Optional[int] = None):
         """Initiate custom bot
@@ -27,7 +30,6 @@ class MyBot(AresBot):
 
         self._detected_race: bool = False
         self._detected_enemy_race: Race = Race.Random
-        self._sent_oops_chat: bool = False
         self._sent_race_tag: bool = False
         self._unreachable_cells = None
 
@@ -40,33 +42,32 @@ class MyBot(AresBot):
             ).position
         return attack_target
 
-    @property
-    def corrected_enemy_race(self) -> Race:
-        if self.enemy_race != Race.Random:
-            return self.enemy_race
-
-        # random enemy race, update based on first enemy unit
-        if not self._detected_race and self.enemy_units:
-            self._detected_enemy_race = self.enemy_units[0].race
-
-        return self._detected_enemy_race
-
     async def on_start(self) -> None:
         await super(MyBot, self).on_start()
-        self.combat_manager = CombatManager(self, self.config, self.mediator)
+        self.match_up_tracker = MatchUpTracker(self, self.config, self.mediator)
+        self.combat_manager = CombatManager(
+            self, self.config, self.mediator, self.match_up_tracker
+        )
 
     async def on_step(self, iteration: int) -> None:
         await super(MyBot, self).on_step(iteration)
 
         self.combat_manager.execute()
 
-        if not self._sent_oops_chat and not self.units and self.time > 10.0:
-            await self.chat_send("oops")
-            self._sent_oops_chat = True
+        await self.match_up_tracker.execute()
 
         if not self._sent_race_tag and self.time > 5.0:
-            await self.chat_send(f"Tag: {self.race}", True)
+            await self.chat_send(f"Tag: My Race: {self.race.name}", True)
+            await self.chat_send(f"Tag: Enemy Race: {self.enemy_race.name}", True)
             self._sent_race_tag = True
+
+    async def on_unit_destroyed(self, unit_tag: int) -> None:
+        await super(MyBot, self).on_unit_destroyed(unit_tag)
+        self.match_up_tracker.remove_unit_tag(unit_tag)
+
+    async def on_unit_created(self, unit: Unit) -> None:
+        # on micro ladder, assign all to attacking by default
+        self.mediator.assign_role(tag=unit.tag, role=UnitRole.ATTACKING)
 
     def get_total_supply(self, units: Units) -> int:
         return sum(

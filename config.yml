@@ -4,12 +4,12 @@
 
 # Custom values not used by ares
 MyBotName: oops
-MyBotRace: Random
+MyBotRace: Protoss
 ########################
 
 UseData: False
-Debug: False
-GameStep: 1
+Debug: True
+GameStep: 2
 DebugGameStep: 1
 
 DebugOptions:
@@ -17,5 +17,5 @@ DebugOptions:
     ActiveGrid: Ground
     ChatDebug: True
     DebugSpawn: False
-    ShowPathingCost: True
+    ShowPathingCost: False
     ResourceDebug: False

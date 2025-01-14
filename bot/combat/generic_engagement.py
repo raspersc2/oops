@@ -2,21 +2,21 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Union
 
 import numpy as np
-from sc2.data import Race
-from sc2.ids.ability_id import AbilityId
-from sc2.ids.unit_typeid import UnitTypeId as UnitID
-from sc2.position import Point2
-
 from ares import ManagerMediator
-from ares.behaviors.combat.individual import CombatIndividualBehavior, KeepUnitSafe
-from ares.consts import ALL_STRUCTURES
 from ares.behaviors.combat.individual import (
     AMove,
+    CombatIndividualBehavior,
+    KeepUnitSafe,
     StutterUnitBack,
     StutterUnitForward,
     UseAbility,
 )
+from ares.consts import ALL_STRUCTURES
 from cython_extensions import cy_closest_to, cy_distance_to
+from sc2.data import Race
+from sc2.ids.ability_id import AbilityId
+from sc2.ids.unit_typeid import UnitTypeId as UnitID
+from sc2.position import Point2
 from sc2.unit import Unit
 from sc2.units import Units
 
