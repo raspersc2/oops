@@ -3,9 +3,6 @@ from enum import Enum
 from typing import Any, Optional
 
 import numpy as np
-from cython_extensions import cy_is_facing
-from sc2.units import Units
-
 from ares import AresBot, UnitRole
 from ares.consts import (
     LOSS_DECISIVE_OR_WORSE,
@@ -23,6 +20,7 @@ from loguru import logger
 from sc2.ids.unit_typeid import UnitTypeId as UnitID
 from sc2.position import Point2
 from sc2.unit import Unit
+from sc2.units import Units
 
 from bot.combat_squads.squad.squad_engagement import SquadEngagement
 from bot.combat_squads.squad.squad_movement import SquadMovement

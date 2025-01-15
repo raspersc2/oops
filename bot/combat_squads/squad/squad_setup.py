@@ -3,9 +3,6 @@ from dataclasses import dataclass, field
 from typing import Union
 
 import numpy as np
-from s2clientprotocol.data_pb2 import AbilityData
-from sc2.ids.ability_id import AbilityId
-
 from ares import AresBot
 from ares.behaviors.combat import CombatManeuver
 from ares.behaviors.combat.individual import UseAbility
@@ -15,6 +12,8 @@ from ares.managers.manager_mediator import ManagerMediator
 from ares.managers.squad_manager import UnitSquad
 from cython_extensions import cy_center, cy_towards
 from loguru import logger
+from s2clientprotocol.data_pb2 import AbilityData
+from sc2.ids.ability_id import AbilityId
 from sc2.position import Point2
 from sc2.unit import Unit
 from sc2.units import Units

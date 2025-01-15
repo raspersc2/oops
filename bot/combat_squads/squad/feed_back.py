@@ -1,15 +1,14 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Union
 
-from cython_extensions.geometry import cy_distance_to_squared, cy_distance_to
-from sc2.ids.ability_id import AbilityId
-from sc2.unit import Unit
-from sc2.units import Units
-
 from ares.behaviors.combat.individual.combat_individual_behavior import (
     CombatIndividualBehavior,
 )
 from ares.managers.manager_mediator import ManagerMediator
+from cython_extensions.geometry import cy_distance_to, cy_distance_to_squared
+from sc2.ids.ability_id import AbilityId
+from sc2.unit import Unit
+from sc2.units import Units
 
 if TYPE_CHECKING:
     from ares import AresBot

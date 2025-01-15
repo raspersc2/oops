@@ -9,7 +9,6 @@ from ares.behaviors.combat.individual import (
     ShootTargetInRange,
     UseAbility,
 )
-from ares.behaviors.combat.individual.siege_tank_decision import SiegeTankDecision
 from ares.dicts.unit_data import UNIT_DATA
 from ares.managers.manager_mediator import ManagerMediator
 from ares.managers.squad_manager import UnitSquad
@@ -40,9 +39,12 @@ class SquadRetreating(BaseSquad):
         grid: np.ndarray = self.mediator.get_ground_grid
         units: list[Unit] = squad.squad_units
         retreat_position: Point2
-        if squad.main_squad:
+        rough_retreat_spot: Point2 = Point2(
+            cy_towards(squad.squad_position, target, -12.5)
+        )
+        if squad.main_squad and self.ai.in_pathing_grid(rough_retreat_spot):
             retreat_position = self.mediator.find_closest_safe_spot(
-                from_pos=Point2(cy_towards(squad.squad_position, target, -12.5)),
+                from_pos=rough_retreat_spot,
                 grid=grid,
             )
         elif "pos_of_main_squad" in kwargs:
@@ -70,7 +72,9 @@ class SquadRetreating(BaseSquad):
                 continue
 
             retreat_maneuver: CombatManeuver = CombatManeuver()
-            retreat_maneuver.add(SiegeTankDecision(unit, enemy, target))
+            retreat_maneuver = self._use_unit_abilities(
+                unit, enemy, grid, squad, target, retreat_maneuver
+            )
             retreat_maneuver.add(ShootTargetInRange(unit, enemy))
             retreat_maneuver.add(KeepUnitSafe(unit, grid))
             retreat_maneuver.add(
