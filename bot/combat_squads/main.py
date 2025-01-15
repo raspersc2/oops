@@ -3,6 +3,9 @@ from enum import Enum
 from typing import Any, Optional
 
 import numpy as np
+from cython_extensions import cy_is_facing
+from sc2.units import Units
+
 from ares import AresBot, UnitRole
 from ares.consts import (
     LOSS_DECISIVE_OR_WORSE,
@@ -162,6 +165,8 @@ class CombatSquadsController:
                 attack_target,
             )
 
+            self._track_stutter_forward(squad, far_enemy)
+
             _move_to: Point2 = (
                 attack_target
                 if squad.main_squad
@@ -198,6 +203,7 @@ class CombatSquadsController:
             enemy=close_enemy,
             target=attack_target,
             pos_of_main_squad=pos_of_main_squad,
+            stutter_forward=self._squads_tracker[squad.squad_id]["stutter_forward"],
             _unit_tag_to_bane_tag=_unit_tag_to_bane_tag,
         )
 
@@ -223,6 +229,26 @@ class CombatSquadsController:
                     self.ai.draw_text_on_world(
                         squad.squad_position, f"{squad.squad_id} Retreating"
                     )
+
+    def _track_stutter_forward(self, squad: UnitSquad, close_enemy: Units) -> None:
+        our_range = [
+            u.ground_range
+            for u in squad.squad_units
+            if not UNIT_DATA[u.type_id]["flying"]
+        ]
+        our_avg_range = sum(our_range) / len(our_range) if our_range else 0
+
+        enemy_range = [
+            u.ground_range for u in close_enemy if not UNIT_DATA[u.type_id]["flying"]
+        ]
+        enemy_avg_range = sum(enemy_range) / len(enemy_range) if enemy_range else 0
+
+        if our_avg_range < enemy_avg_range:
+            self._squads_tracker[squad.squad_id]["stutter_forward"] = True
+            self._squads_tracker[squad.squad_id]["time_stutter_set"] = self.ai.time
+        else:
+            self._squads_tracker[squad.squad_id]["stutter_forward"] = False
+            self._squads_tracker[squad.squad_id]["time_stutter_set"] = self.ai.time
 
     def _reset_engagement(
         self,

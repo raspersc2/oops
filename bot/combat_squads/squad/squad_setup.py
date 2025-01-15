@@ -3,7 +3,12 @@ from dataclasses import dataclass, field
 from typing import Union
 
 import numpy as np
+from s2clientprotocol.data_pb2 import AbilityData
+from sc2.ids.ability_id import AbilityId
+
 from ares import AresBot
+from ares.behaviors.combat import CombatManeuver
+from ares.behaviors.combat.individual import UseAbility
 from ares.behaviors.combat.individual.siege_tank_decision import SiegeTankDecision
 from ares.dicts.unit_data import UNIT_DATA
 from ares.managers.manager_mediator import ManagerMediator
@@ -16,6 +21,7 @@ from sc2.units import Units
 from scipy.interpolate import interp1d
 
 from bot.combat_squads.squad.base_squad import BaseSquad
+from bot.combat_squads.squad.feed_back import FeedBack
 
 
 @dataclass
@@ -71,12 +77,19 @@ class SquadSetup(BaseSquad):
             if UNIT_DATA[unit.type_id]["flying"]:
                 unit.move(squad.squad_position)
                 continue
-            self.ai.register_behavior(SiegeTankDecision(unit, enemy, target))
+            fodder_maneuver: CombatManeuver = CombatManeuver()
+            fodder_maneuver.add(SiegeTankDecision(unit, enemy, target))
+            fodder_maneuver.add(FeedBack(unit, enemy))
             tag: int = unit.tag
             if tag in self.core_concave_positions:
-                unit.move(self.core_concave_positions[tag])
+                pos: Point2 = self.core_concave_positions[tag]
+                if self.ai.in_pathing_grid(pos):
+                    fodder_maneuver.add(UseAbility(AbilityId.MOVE_MOVE, unit, pos))
             elif tag in self.fodder_concave_positions:
-                unit.move(self.fodder_concave_positions[tag])
+                pos: Point2 = self.fodder_concave_positions[tag]
+                if self.ai.in_pathing_grid(pos):
+                    fodder_maneuver.add(UseAbility(AbilityId.MOVE_MOVE, unit, pos))
+            self.ai.register_behavior(fodder_maneuver)
 
     def _calculate_concave(
         self,

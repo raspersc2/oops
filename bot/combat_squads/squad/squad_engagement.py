@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from typing import Optional, Union
 
 import numpy as np
+from sc2.ids.buff_id import BuffId
+
 from ares import AresBot
 from ares.behaviors.combat import CombatManeuver
 from ares.behaviors.combat.group import AMoveGroup
@@ -14,6 +16,8 @@ from ares.behaviors.combat.individual import (
     StutterUnitBack,
     UseAbility,
     UseTransfuse,
+    StutterUnitForward,
+    PathUnitToTarget,
 )
 from ares.behaviors.combat.individual.ghost_snipe import GhostSnipe
 from ares.behaviors.combat.individual.medivac_heal import MedivacHeal
@@ -56,12 +60,18 @@ class SquadEngagement(BaseSquad):
         if "_unit_tag_to_bane_tag" in kwargs:
             _unit_tag_to_bane_tag = kwargs["_unit_tag_to_bane_tag"]
 
+        stutter_forward: bool = False
+        if "stutter_forward" in kwargs:
+            stutter_forward = kwargs["stutter_forward"]
+
         # no enemy, a-move group and return out of here
         if not enemy:
             self.ai.register_behavior(AMoveGroup(squad.squad_units, squad.tags, target))
             return
 
         units: list[Unit] = squad.squad_units
+        fliers: list[Unit] = [u for u in enemy if UNIT_DATA[u.type_id]["flying"]]
+        ground: list[Unit] = [u for u in enemy if not UNIT_DATA[u.type_id]["flying"]]
 
         for unit in units:
             avoid_grid: np.ndarray = self.mediator.get_ground_avoidance_grid
@@ -89,6 +99,7 @@ class SquadEngagement(BaseSquad):
             if (
                 unit.shield_percentage < 0.2
                 and AbilityId.EFFECT_BLINK_STALKER in unit.abilities
+                and not unit.has_buff(BuffId.FUNGALGROWTH)
             ):
                 safe_spot: Point2 = self.mediator.find_closest_safe_spot(
                     from_pos=unit.position, grid=grid
@@ -109,18 +120,29 @@ class SquadEngagement(BaseSquad):
                 unit.ground_range < 3.0
                 and (unit.can_attack or unit.type_id == UnitID.BANELING)
             ) or unit.is_hallucination:
-                combat_maneuver.add(AMove(unit=unit, target=target))
+                combat_maneuver = self._melee_attack(
+                    combat_maneuver, unit, target, enemy, grid
+                )
             # sentry hallucinate units
             elif hallucinate := self._use_hallucinate(unit, target):
                 combat_maneuver.add(hallucinate)
             # default attacking logic
             elif unit.can_attack:
-                combat_maneuver.add(ShootTargetInRange(unit, enemy))
-                combat_maneuver.add(
-                    StutterUnitBack(
-                        unit, cy_closest_to(unit.position, enemy), grid=grid
+                combat_maneuver.add(ShootTargetInRange(unit, ground, extra_range=1.0))
+                combat_maneuver.add(ShootTargetInRange(unit, fliers))
+                if stutter_forward:
+                    _enemy: list[Unit] = (
+                        ground if ground else (fliers if fliers else enemy)
                     )
-                )
+                    combat_maneuver.add(
+                        StutterUnitForward(unit, cy_closest_to(unit.position, _enemy))
+                    )
+                else:
+                    combat_maneuver.add(
+                        StutterUnitBack(
+                            unit, cy_closest_to(unit.position, enemy), grid=grid
+                        )
+                    )
             else:
                 combat_maneuver.add(AMove(unit=unit, target=squad.squad_position))
 
@@ -200,4 +222,26 @@ class SquadEngagement(BaseSquad):
 
         combat_maneuver.add(UseTransfuse(unit, squad.squad_units, extra_range=1.5))
 
+        return combat_maneuver
+
+    def _melee_attack(
+        self,
+        combat_maneuver: CombatManeuver,
+        unit: Unit,
+        target: Point2,
+        enemy: Units,
+        grid: np.ndarray,
+    ) -> CombatManeuver:
+        # chase down armoured units if zergling
+        if unit.type_id == UnitID.ZERGLING:
+            if armoured := [
+                u for u in enemy if not UNIT_DATA[u.type_id]["flying"] and u.is_armored
+            ]:
+                target: Unit = cy_closest_to(unit.position, armoured)
+                if cy_distance_to_squared(unit.position, target.position) > 16.0:
+                    combat_maneuver.add(PathUnitToTarget(unit, grid, target.position))
+                else:
+                    combat_maneuver.add(AttackTarget(unit=unit, target=target))
+
+        combat_maneuver.add(AMove(unit=unit, target=target))
         return combat_maneuver
