@@ -42,7 +42,11 @@ class SquadRetreating(BaseSquad):
         rough_retreat_spot: Point2 = Point2(
             cy_towards(squad.squad_position, target, -12.5)
         )
-        if squad.main_squad and self.ai.in_pathing_grid(rough_retreat_spot):
+        if (
+            squad.main_squad
+            and self.ai.in_map_bounds(rough_retreat_spot)
+            and self.ai.in_pathing_grid(rough_retreat_spot)
+        ):
             retreat_position = self.mediator.find_closest_safe_spot(
                 from_pos=rough_retreat_spot,
                 grid=grid,
