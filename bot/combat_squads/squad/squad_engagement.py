@@ -2,9 +2,12 @@ from dataclasses import dataclass, field
 from typing import Optional, Union
 
 import numpy as np
+from cython_extensions.combat_utils import cy_attack_ready
+from sc2.data import Race
+
 from ares import AresBot
 from ares.behaviors.combat import CombatManeuver
-from ares.behaviors.combat.group import AMoveGroup
+from ares.behaviors.combat.group import AMoveGroup, StutterGroupBack
 from ares.behaviors.combat.individual import (
     AMove,
     AttackTarget,
@@ -64,12 +67,37 @@ class SquadEngagement(BaseSquad):
         fliers: list[Unit] = [u for u in enemy if UNIT_DATA[u.type_id]["flying"]]
         ground: list[Unit] = [u for u in enemy if not UNIT_DATA[u.type_id]["flying"]]
 
+        # own_fliers: list[Unit] = [u for u in squad.squad_units if UNIT_DATA[u.type_id]["flying"]]
+        own_ground: list[Unit] = [
+            u for u in squad.squad_units if not UNIT_DATA[u.type_id]["flying"]
+        ]
+
+        # all_enemy_low_range: bool = all(
+        #     u.ground_range < 3 and u.type_id != UnitID.BANELING for u in ground
+        # )
+        threshold = 0.85
+        count_low_range = sum(1 for u in ground if u.ground_range < 3 and u.type_id != UnitID.BANELING)
+        all_enemy_low_range = count_low_range / len(ground) > threshold if ground else False
+
+        all_own_range: bool = all(u for u in own_ground if u.ground_range >= 3.0)
+
+        # micro as a group so we stay together
+        do_melee_fight: bool = all_enemy_low_range and (
+            all_own_range or self.ai.race != Race.Zerg
+        )
+
         for unit in units:
             avoid_grid: np.ndarray = self.mediator.get_ground_avoidance_grid
             grid: np.ndarray = self.mediator.get_ground_grid
             if UNIT_DATA[unit.type_id]["flying"]:
                 avoid_grid = self.mediator.get_air_avoidance_grid
                 grid = self.mediator.get_air_grid
+
+            if do_melee_fight and own_ground:
+                total_radius = sum(u.radius for u in own_ground)
+                distance_check: float = total_radius / 1.2
+                self._fight_vs_melee(unit, ground, grid, squad.squad_position, distance_check)
+                continue
 
             if unit.tag in _unit_tag_to_bane_tag:
                 bane_tag: int = _unit_tag_to_bane_tag[unit.tag]
@@ -87,10 +115,8 @@ class SquadEngagement(BaseSquad):
                 unit, enemy, grid, squad, target, combat_maneuver
             )
 
-            if (
-                unit.shield_percentage < 0.2
-                and AbilityId.EFFECT_BLINK_STALKER in unit.abilities
-                and not unit.has_buff(BuffId.FUNGALGROWTH)
+            if AbilityId.EFFECT_BLINK_STALKER in unit.abilities and not unit.has_buff(
+                BuffId.FUNGALGROWTH
             ):
                 safe_spot: Point2 = self.mediator.find_closest_safe_spot(
                     from_pos=unit.position, grid=grid
@@ -102,6 +128,9 @@ class SquadEngagement(BaseSquad):
                         target=safe_spot,
                     )
                 )
+
+            if unit.shield_health_percentage < 0.25:
+                combat_maneuver.add(KeepUnitSafe(unit=unit, grid=grid))
 
             # avoid banes
             if self._should_flee_baneling(unit, enemy):
@@ -179,3 +208,24 @@ class SquadEngagement(BaseSquad):
 
         combat_maneuver.add(AMove(unit=unit, target=target))
         return combat_maneuver
+
+    def _fight_vs_melee(
+        self,
+        u: Unit,
+        enemy_ground: list[Unit],
+        grid: np.ndarray,
+        squad_position: Point2,
+        distance_check: float
+    ) -> None:
+        e_target: Unit = cy_closest_to(squad_position, enemy_ground)
+        melee_fight: CombatManeuver = CombatManeuver()
+
+        melee_fight.add(ShootTargetInRange(u, enemy_ground))
+        if cy_distance_to_squared(u.position, squad_position) > distance_check:
+            melee_fight.add(UseAbility(AbilityId.MOVE_MOVE, u, squad_position))
+
+        if u.ground_range >= 3:
+            melee_fight.add(StutterUnitBack(u, e_target, grid=grid))
+        else:
+            melee_fight.add(AMove(unit=u, target=e_target.position))
+        self.ai.register_behavior(melee_fight)

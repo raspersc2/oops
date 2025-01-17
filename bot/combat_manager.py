@@ -1,5 +1,7 @@
 from typing import TYPE_CHECKING
 
+from sc2.data import Race
+
 from ares import ManagerMediator
 from ares.behaviors.combat.individual import AttackTarget
 from ares.cache import property_cache_once_per_frame
@@ -75,7 +77,8 @@ class CombatManager:
         ):
             return
 
-        self._assign_units_to_banes(self.ai.enemy_units)
+        if self.ai.race == Race.Zerg:
+            self._assign_units_to_banes(self.ai.enemy_units)
         self._combat_squad_controller.execute(
             self.attack_target, self._unit_tag_to_bane_tag
         )

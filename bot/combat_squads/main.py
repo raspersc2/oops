@@ -3,6 +3,8 @@ from enum import Enum
 from typing import Any, Optional
 
 import numpy as np
+from sc2.data import Race
+
 from ares import AresBot, UnitRole
 from ares.consts import (
     LOSS_DECISIVE_OR_WORSE,
@@ -240,8 +242,11 @@ class CombatSquadsController:
             u.ground_range for u in close_enemy if not UNIT_DATA[u.type_id]["flying"]
         ]
         enemy_avg_range = sum(enemy_range) / len(enemy_range) if enemy_range else 0
+        e_zealots = []
+        if self.ai.enemy_race == Race.Protoss:
+            e_zealots: list[Unit] = [e for e in close_enemy if e.type_id == UnitID.ZEALOT]
 
-        if our_avg_range < enemy_avg_range:
+        if our_avg_range < enemy_avg_range and not e_zealots:
             self._squads_tracker[squad.squad_id]["stutter_forward"] = True
             self._squads_tracker[squad.squad_id]["time_stutter_set"] = self.ai.time
         else:
