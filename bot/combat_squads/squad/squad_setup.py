@@ -77,7 +77,7 @@ class SquadSetup(BaseSquad):
                 unit.move(squad.squad_position)
                 continue
             fodder_maneuver: CombatManeuver = CombatManeuver()
-            fodder_maneuver.add(SiegeTankDecision(unit, enemy, target))
+            # fodder_maneuver.add(SiegeTankDecision(unit, enemy, target))
             fodder_maneuver.add(FeedBack(unit, enemy))
             tag: int = unit.tag
             if tag in self.core_concave_positions:

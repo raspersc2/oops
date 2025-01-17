@@ -242,11 +242,11 @@ class CombatSquadsController:
             u.ground_range for u in close_enemy if not UNIT_DATA[u.type_id]["flying"]
         ]
         enemy_avg_range = sum(enemy_range) / len(enemy_range) if enemy_range else 0
-        e_zealots = []
+        no_stutter_enemy = []
         if self.ai.enemy_race == Race.Protoss:
-            e_zealots: list[Unit] = [e for e in close_enemy if e.type_id == UnitID.ZEALOT]
+            no_stutter_enemy: list[Unit] = [e for e in close_enemy if e.type_id in {UnitID.ARCHON, UnitID.ZEALOT}]
 
-        if our_avg_range < enemy_avg_range and not e_zealots:
+        if our_avg_range < enemy_avg_range and not no_stutter_enemy:
             self._squads_tracker[squad.squad_id]["stutter_forward"] = True
             self._squads_tracker[squad.squad_id]["time_stutter_set"] = self.ai.time
         else:

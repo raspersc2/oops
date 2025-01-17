@@ -2,12 +2,11 @@ from dataclasses import dataclass, field
 from typing import Optional, Union
 
 import numpy as np
-from cython_extensions.combat_utils import cy_attack_ready
 from sc2.data import Race
 
 from ares import AresBot
 from ares.behaviors.combat import CombatManeuver
-from ares.behaviors.combat.group import AMoveGroup, StutterGroupBack
+from ares.behaviors.combat.group import AMoveGroup
 from ares.behaviors.combat.individual import (
     AMove,
     AttackTarget,
@@ -95,7 +94,7 @@ class SquadEngagement(BaseSquad):
 
             if do_melee_fight and own_ground:
                 total_radius = sum(u.radius for u in own_ground)
-                distance_check: float = total_radius / 1.2
+                distance_check: float = total_radius / 1.5
                 self._fight_vs_melee(unit, ground, grid, squad.squad_position, distance_check)
                 continue
 
@@ -129,11 +128,9 @@ class SquadEngagement(BaseSquad):
                     )
                 )
 
-            if unit.shield_max > 0 and unit.shield_health_percentage < 0.25 and unit.type_id != UnitID.ZEALOT:
-                combat_maneuver.add(KeepUnitSafe(unit=unit, grid=grid))
-
             # avoid banes
             if self._should_flee_baneling(unit, enemy):
+                combat_maneuver.add(ShootTargetInRange(unit, ground))
                 combat_maneuver.add(KeepUnitSafe(unit, grid))
             # attack move things if possible
             elif (
@@ -148,8 +145,10 @@ class SquadEngagement(BaseSquad):
                 combat_maneuver.add(hallucinate)
             # default attacking logic
             elif unit.can_attack:
-                combat_maneuver.add(ShootTargetInRange(unit, ground, extra_range=1.0))
+                combat_maneuver.add(ShootTargetInRange(unit, ground, extra_range=0.0))
                 combat_maneuver.add(ShootTargetInRange(unit, fliers))
+                if unit.shield_max > 0 and unit.shield_health_percentage < 0.25 and unit.type_id != UnitID.ZEALOT:
+                    combat_maneuver.add(KeepUnitSafe(unit=unit, grid=grid))
                 if stutter_forward:
                     _enemy: list[Unit] = (
                         ground if ground else (fliers if fliers else enemy)
