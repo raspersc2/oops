@@ -1,5 +1,8 @@
 from typing import Optional
 
+from sc2.ids.ability_id import AbilityId
+from sc2.ids.unit_typeid import UnitTypeId
+
 from ares import AresBot, UnitRole
 from ares.consts import ALL_STRUCTURES
 from ares.dicts.unit_data import UNIT_DATA
@@ -68,6 +71,8 @@ class MyBot(AresBot):
     async def on_unit_created(self, unit: Unit) -> None:
         # on micro ladder, assign all to attacking by default
         self.mediator.assign_role(tag=unit.tag, role=UnitRole.ATTACKING)
+        if unit.type_id == UnitTypeId.CYCLONE:
+            await self.client.toggle_autocast([unit], AbilityId.LOCKON_LOCKON)
 
     def get_total_supply(self, units: Units) -> int:
         return sum(

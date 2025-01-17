@@ -10,6 +10,7 @@ from ares.behaviors.combat.individual import (
     UseTransfuse,
 )
 from ares.dicts.aoe_ability_to_range import AOE_ABILITY_SPELLS_INFO
+from ares.dicts.unit_data import UNIT_DATA
 from ares.managers.manager_mediator import ManagerMediator
 from ares.managers.squad_manager import UnitSquad
 from cython_extensions import cy_distance_to_squared
@@ -59,6 +60,28 @@ class BaseSquad:
                     fodder_tags.add(unit.tag)
 
         return fodder_tags
+
+    @staticmethod
+    def get_highest_value_target(units: Units, mineral_weight: float = 0.5) -> Unit:
+        """
+        Given a collection of units, find the highest value target
+        @param units:
+        @param mineral_weight: A value less than 1.0 will give vespene cost more emphasis
+        @return:
+        """
+        max_value: float = 0.0
+        target: Optional[Unit] = None
+
+        for unit in units:
+            value: float = (
+                UNIT_DATA[unit.type_id]["minerals"] * mineral_weight
+                + UNIT_DATA[unit.type_id]["gas"]
+            )
+            if value > max_value:
+                max_value = value
+                target = unit
+
+        return target
 
     def _use_aoe_ability(
         self, unit: Unit, enemy: list[Unit]
@@ -113,7 +136,7 @@ class BaseSquad:
             combat_maneuver.add(aoe_ability)
 
         # combat_maneuver.add(SiegeTankDecision(unit, enemy, target))
-        combat_maneuver.add(RavenAutoTurret(unit, enemy))
+        # combat_maneuver.add(RavenAutoTurret(unit, enemy))
         combat_maneuver.add(MedivacHeal(unit, squad.squad_units, grid, keep_safe=False))
 
         combat_maneuver.add(UseTransfuse(unit, squad.squad_units, extra_range=1.5))

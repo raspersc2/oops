@@ -71,9 +71,6 @@ class SquadEngagement(BaseSquad):
             u for u in squad.squad_units if not UNIT_DATA[u.type_id]["flying"]
         ]
 
-        # all_enemy_low_range: bool = all(
-        #     u.ground_range < 3 and u.type_id != UnitID.BANELING for u in ground
-        # )
         threshold = 0.85
         count_low_range = sum(1 for u in ground if u.ground_range < 3 and u.type_id != UnitID.BANELING)
         all_enemy_low_range = count_low_range / len(ground) > threshold if ground else False
@@ -105,6 +102,10 @@ class SquadEngagement(BaseSquad):
                     continue
 
             combat_maneuver: CombatManeuver = CombatManeuver()
+            if unit.type_id == UnitID.CYCLONE:
+                combat_maneuver.add(self._cyclone_maneuver(unit, enemy, grid))
+                self.ai.register_behavior(combat_maneuver)
+                continue
 
             # avoid things like storms, biles etc
             combat_maneuver.add(KeepUnitSafe(unit, avoid_grid))
@@ -228,3 +229,12 @@ class SquadEngagement(BaseSquad):
         else:
             melee_fight.add(AMove(unit=u, target=e_target.position))
         self.ai.register_behavior(melee_fight)
+
+    def _cyclone_maneuver(self, unit, enemy, grid):
+        cyclone_maneuver: CombatManeuver = CombatManeuver()
+        if AbilityId.LOCKON_LOCKON in unit.abilities and enemy:
+            target: Unit = self.get_highest_value_target(enemy)
+            cyclone_maneuver.add(UseAbility(AbilityId.LOCKON_LOCKON, unit, target))
+        else:
+            cyclone_maneuver.add(KeepUnitSafe(unit, grid))
+        return cyclone_maneuver
