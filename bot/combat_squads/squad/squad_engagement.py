@@ -129,7 +129,7 @@ class SquadEngagement(BaseSquad):
                     )
                 )
 
-            if unit.shield_health_percentage < 0.25:
+            if unit.shield_max > 0 and unit.shield_health_percentage < 0.25 and unit.type_id != UnitID.ZEALOT:
                 combat_maneuver.add(KeepUnitSafe(unit=unit, grid=grid))
 
             # avoid banes
@@ -198,7 +198,7 @@ class SquadEngagement(BaseSquad):
         # chase down armoured units if zergling
         if unit.type_id == UnitID.ZERGLING:
             if armoured := [
-                u for u in enemy if not UNIT_DATA[u.type_id]["flying"] and u.is_armored
+                u for u in enemy if not UNIT_DATA[u.type_id]["flying"] and u.is_armored and u.type_id != UnitID.ROACH
             ]:
                 target: Unit = cy_closest_to(unit.position, armoured)
                 if cy_distance_to_squared(unit.position, target.position) > 16.0:
