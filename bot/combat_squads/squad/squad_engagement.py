@@ -232,8 +232,10 @@ class SquadEngagement(BaseSquad):
 
     def _cyclone_maneuver(self, unit, enemy, grid):
         cyclone_maneuver: CombatManeuver = CombatManeuver()
-        if AbilityId.LOCKON_LOCKON in unit.abilities and enemy:
-            target: Unit = self.get_highest_value_target(enemy)
+        _enemy: list[Unit] = [e for e in enemy if not e.has_buff(BuffId.LOCKON)]
+        if AbilityId.LOCKON_LOCKON in unit.abilities and _enemy:
+            # target: Unit = self.get_highest_value_target(enemy)
+            target: Unit = cy_closest_to(unit.position, _enemy)
             cyclone_maneuver.add(UseAbility(AbilityId.LOCKON_LOCKON, unit, target))
         else:
             cyclone_maneuver.add(KeepUnitSafe(unit, grid))
