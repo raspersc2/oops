@@ -90,12 +90,10 @@ class BaseSquad:
             if ability not in unit.abilities:
                 continue
 
-            if ability == AbilityId.EMP_EMP and self.ai.enemy_race != Race.Protoss:
-                continue
-
             ability_range_squared: float = 9.0 + (
                 AOE_ABILITY_SPELLS_INFO[ability]["range"] ** 2
             )
+
             _targets: list[Unit] = Units(
                 [
                     u
@@ -105,6 +103,8 @@ class BaseSquad:
                 ],
                 self.ai,
             )
+            if ability == AbilityId.EMP_EMP:
+                _targets = [t for t in _targets if t.shield > 48 or t.energy > 48]
             if _targets:
                 min_targets: int = 4
                 if ability in {
@@ -112,6 +112,12 @@ class BaseSquad:
                     AbilityId.KD8CHARGE_KD8CHARGE,
                 }:
                     min_targets = 1
+                elif (
+                    ability in {AbilityId.EMP_EMP}
+                    and self.ai.enemy_race != Race.Protoss
+                ):
+                    min_targets = 2
+
                 avoid_own_ground: bool = ability in {
                     AbilityId.KD8CHARGE_KD8CHARGE,
                     AbilityId.PSISTORM_PSISTORM,

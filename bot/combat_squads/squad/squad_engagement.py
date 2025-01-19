@@ -5,6 +5,7 @@ import numpy as np
 from sc2.data import Race
 
 from ares import AresBot
+from ares.consts import WORKER_TYPES
 from ares.behaviors.combat import CombatManeuver
 from ares.behaviors.combat.group import AMoveGroup
 from ares.behaviors.combat.individual import (
@@ -41,6 +42,7 @@ class SquadEngagement(BaseSquad):
     target: Point2
     _transfused_tags: set[int] = field(default_factory=set)
     MELEE_FLEE_AT_PERC: float = 0.3
+    REAPER_FLEE_AT: float = 0.2
 
     def execute(
         self,
@@ -72,8 +74,12 @@ class SquadEngagement(BaseSquad):
         ]
 
         threshold = 0.85
-        count_low_range = sum(1 for u in ground if u.ground_range < 3 and u.type_id != UnitID.BANELING)
-        all_enemy_low_range = count_low_range / len(ground) > threshold if ground else False
+        count_low_range = sum(
+            1 for u in ground if u.ground_range < 3 and u.type_id != UnitID.BANELING
+        )
+        all_enemy_low_range = (
+            count_low_range / len(ground) > threshold if ground else False
+        )
 
         all_own_range: bool = all(u for u in own_ground if u.ground_range >= 3.0)
 
@@ -92,7 +98,9 @@ class SquadEngagement(BaseSquad):
             if do_melee_fight and own_ground:
                 total_radius = sum(u.radius for u in own_ground)
                 distance_check: float = total_radius / 1.5
-                self._fight_vs_melee(unit, ground, grid, squad.squad_position, distance_check)
+                self._fight_vs_melee(
+                    unit, ground, grid, squad.squad_position, distance_check
+                )
                 continue
 
             if unit.tag in _unit_tag_to_bane_tag:
@@ -115,6 +123,8 @@ class SquadEngagement(BaseSquad):
                 unit, enemy, grid, squad, target, combat_maneuver
             )
 
+            combat_maneuver = self._use_stim_pack(unit, combat_maneuver)
+
             if AbilityId.EFFECT_BLINK_STALKER in unit.abilities and not unit.has_buff(
                 BuffId.FUNGALGROWTH
             ):
@@ -129,13 +139,19 @@ class SquadEngagement(BaseSquad):
                     )
                 )
 
+            if (
+                unit.type_id == UnitID.REAPER
+                and unit.health_percentage < self.REAPER_FLEE_AT
+            ):
+                combat_maneuver.add(KeepUnitSafe(unit, self.mediator.get_climber_grid))
             # avoid banes
-            if self._should_flee_baneling(unit, enemy):
+            elif self._should_flee_baneling(unit, enemy):
                 combat_maneuver.add(ShootTargetInRange(unit, ground))
                 combat_maneuver.add(KeepUnitSafe(unit, grid))
             # attack move things if possible
             elif (
                 unit.ground_range < 3.0
+                and unit.type_id not in WORKER_TYPES
                 and (unit.can_attack or unit.type_id == UnitID.BANELING)
             ) or unit.is_hallucination:
                 combat_maneuver = self._melee_attack(
@@ -148,7 +164,11 @@ class SquadEngagement(BaseSquad):
             elif unit.can_attack:
                 combat_maneuver.add(ShootTargetInRange(unit, ground, extra_range=0.0))
                 combat_maneuver.add(ShootTargetInRange(unit, fliers))
-                if unit.shield_max > 0 and unit.shield_health_percentage < 0.25 and unit.type_id != UnitID.ZEALOT:
+                if (
+                    unit.shield_max > 0
+                    and unit.shield_health_percentage < 0.25
+                    and unit.type_id != UnitID.ZEALOT
+                ):
                     combat_maneuver.add(KeepUnitSafe(unit=unit, grid=grid))
                 if stutter_forward:
                     _enemy: list[Unit] = (
@@ -198,13 +218,14 @@ class SquadEngagement(BaseSquad):
         # chase down armoured units if zergling
         if unit.type_id == UnitID.ZERGLING:
             if armoured := [
-                u for u in enemy if not UNIT_DATA[u.type_id]["flying"] and u.is_armored and u.type_id != UnitID.ROACH
+                u
+                for u in enemy
+                if not UNIT_DATA[u.type_id]["flying"]
+                and u.is_armored
+                and u.type_id != UnitID.ROACH
             ]:
                 target: Unit = cy_closest_to(unit.position, armoured)
-                if cy_distance_to_squared(unit.position, target.position) > 16.0:
-                    combat_maneuver.add(PathUnitToTarget(unit, grid, target.position))
-                else:
-                    combat_maneuver.add(AttackTarget(unit=unit, target=target))
+                combat_maneuver.add(AttackTarget(unit=unit, target=target))
 
         combat_maneuver.add(AMove(unit=unit, target=target))
         return combat_maneuver
@@ -215,7 +236,7 @@ class SquadEngagement(BaseSquad):
         enemy_ground: list[Unit],
         grid: np.ndarray,
         squad_position: Point2,
-        distance_check: float
+        distance_check: float,
     ) -> None:
         e_target: Unit = cy_closest_to(squad_position, enemy_ground)
         melee_fight: CombatManeuver = CombatManeuver()
@@ -240,3 +261,22 @@ class SquadEngagement(BaseSquad):
         else:
             cyclone_maneuver.add(KeepUnitSafe(unit, grid))
         return cyclone_maneuver
+
+    def _use_stim_pack(
+        self, unit: Unit, combat_maneuver: CombatManeuver
+    ) -> CombatManeuver:
+        if unit.type_id not in {UnitID.MARINE, UnitID.MARAUDER}:
+            return combat_maneuver
+
+        ability: AbilityId = (
+            AbilityId.EFFECT_STIM_MARINE
+            if unit.type_id == UnitID.MARINE
+            else AbilityId.EFFECT_STIM_MARAUDER
+        )
+        if (
+            unit.health_percentage > 0.8
+            and ability in unit.abilities
+            and not unit.has_buff(BuffId.STIMPACK)
+        ):
+            combat_maneuver.add(UseAbility(ability, unit))
+        return combat_maneuver

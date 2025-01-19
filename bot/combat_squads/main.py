@@ -244,7 +244,9 @@ class CombatSquadsController:
         enemy_avg_range = sum(enemy_range) / len(enemy_range) if enemy_range else 0
         no_stutter_enemy = []
         if self.ai.enemy_race == Race.Protoss:
-            no_stutter_enemy: list[Unit] = [e for e in close_enemy if e.type_id in {UnitID.ARCHON, UnitID.ZEALOT}]
+            no_stutter_enemy: list[Unit] = [
+                e for e in close_enemy if e.type_id in {UnitID.ARCHON, UnitID.ZEALOT}
+            ]
 
         if our_avg_range < enemy_avg_range and not no_stutter_enemy:
             self._squads_tracker[squad.squad_id]["stutter_forward"] = True
@@ -467,14 +469,21 @@ class CombatSquadsController:
         if all([e for e in enemy if not e.can_attack]):
             fight_result = EngagementResult.VICTORY_EMPHATIC
         else:
-            fight_result = self.mediator.can_win_fight(
-                own_units=[
-                    u
-                    for u in squad_units
-                    if u.can_attack and u.type_id not in COMBAT_SIM_IGNORE
-                ],
-                enemy_units=enemy,
-            )
+            _own_units = [
+                u
+                for u in squad_units
+                if u.can_attack and u.type_id not in COMBAT_SIM_IGNORE
+            ]
+            if (
+                self.ai.get_total_supply(_own_units)
+                > self.ai.get_total_supply(enemy) * 1.4
+            ):
+                fight_result = EngagementResult.VICTORY_EMPHATIC
+            else:
+                fight_result = self.mediator.can_win_fight(
+                    own_units=_own_units,
+                    enemy_units=enemy,
+                )
 
         # currently engaging and we should disengage
         if engaging and fight_result in self.disengage_threshold:
